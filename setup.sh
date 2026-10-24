@@ -5,9 +5,25 @@
 set -e
 cd "$(dirname "$0")"
 
-WEIGHTS=vda/checkpoints/video_depth_anything_vits.pth
-WEIGHTS_URL=https://huggingface.co/depth-anything/Video-Depth-Anything-Small/resolve/main/video_depth_anything_vits.pth
-WEIGHTS_SHA256=13379300b739e659f076a59d52e9801bd8d38c541a7e71f73bbca4dcfb013609
+HF=https://huggingface.co/depth-anything
+
+# fetch <file> <hf-repo> <sha256> — download into vda/checkpoints and verify.
+fetch() {
+  local dest="vda/checkpoints/$1"
+  if [ -f "$dest" ] && [ "$(shasum -a 256 "$dest" | cut -d' ' -f1)" = "$3" ]; then
+    echo "→ $1 present"
+    return
+  fi
+  echo "→ downloading $1"
+  mkdir -p vda/checkpoints
+  curl -fL --progress-bar -o "$dest.part" "$HF/$2/resolve/main/$1"
+  if [ "$(shasum -a 256 "$dest.part" | cut -d' ' -f1)" != "$3" ]; then
+    rm -f "$dest.part"
+    echo "checksum mismatch on $1 — try again"
+    exit 1
+  fi
+  mv "$dest.part" "$dest"
+}
 
 if [ "$(uname -s)/$(uname -m)" != "Darwin/arm64" ]; then
   echo "warning: built for Apple Silicon macOS — on this machine it will run on CPU (very slow)."
@@ -33,19 +49,10 @@ fi
 echo "→ installing dependencies"
 .venv/bin/python -m pip install -q --disable-pip-version-check -r requirements.txt
 
-# 3. model weights (~116 MB, Apache-2.0)
-if [ -f "$WEIGHTS" ] && [ "$(shasum -a 256 "$WEIGHTS" | cut -d' ' -f1)" = "$WEIGHTS_SHA256" ]; then
-  echo "→ model weights present"
-else
-  echo "→ downloading model weights"
-  mkdir -p "$(dirname "$WEIGHTS")"
-  curl -fL --progress-bar -o "$WEIGHTS.part" "$WEIGHTS_URL"
-  if [ "$(shasum -a 256 "$WEIGHTS.part" | cut -d' ' -f1)" != "$WEIGHTS_SHA256" ]; then
-    rm -f "$WEIGHTS.part"
-    echo "checksum mismatch on downloaded weights — try again"
-    exit 1
-  fi
-  mv "$WEIGHTS.part" "$WEIGHTS"
-fi
+# 3. model weights (Small, ~116 MB each, Apache-2.0)
+fetch video_depth_anything_vits.pth Video-Depth-Anything-Small \
+  13379300b739e659f076a59d52e9801bd8d38c541a7e71f73bbca4dcfb013609
+fetch metric_video_depth_anything_vits.pth Metric-Video-Depth-Anything-Small \
+  3c28432b4e1f0d7bb31cad5151b6313b49457db5aa58d82e85bfb0f8b1311b33
 
 echo "✓ ready — start it with ./run.sh, then open http://127.0.0.1:7860"
