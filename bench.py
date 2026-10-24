@@ -17,6 +17,9 @@ import psutil
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PY = os.path.join(ROOT, ".venv/bin/python")
+# Child stderr (tqdm, warnings) goes to its own log, never into the protocol pipe:
+# merged stderr once glued progress-bar text onto PROGRESS lines and broke parsing.
+LOG = os.path.join(ROOT, "bench.log")
 
 
 def track(proc, on_line):
@@ -51,6 +54,7 @@ class RunStats:
     def __init__(self):
         self.t0 = time.time()
         self.first_progress = None
+        self.first_done = 0
         self.last_progress = None
         self.done = 0
         self.total = 0
@@ -62,7 +66,7 @@ class RunStats:
             _, d, t = line.split()[:3]
             self.done, self.total = int(d), int(t)
             if self.first_progress is None and self.done > 0:
-                self.first_progress = now
+                self.first_progress, self.first_done = now, self.done
             self.last_progress = now
         elif line.startswith(("STAGE done", "DONE")):
             self.out = line
@@ -70,17 +74,18 @@ class RunStats:
     def report(self, label, peak):
         wall = time.time() - self.t0
         ttfp = (self.first_progress - self.t0) if self.first_progress else None
-        steady = None
+        steady = None             # throughput once frames flow (excludes load/probe lead-in)
         if self.first_progress and self.last_progress and self.last_progress > self.first_progress:
-            steady = self.done / (self.last_progress - self.t0)
+            steady = (self.done - self.first_done) / (self.last_progress - self.first_progress)
         print(f"\n=== {label} ===")
         print(f"wall            {wall:8.1f} s")
         print(f"first progress  {ttfp:8.1f} s   (load + warmup + chunk1 lead-in)" if ttfp else "first progress      n/a")
         print(f"frames          {self.done}/{self.total}")
         print(f"avg fps         {self.done / wall:8.2f}")
+        print(f"steady fps      {steady:8.2f}" if steady else "steady fps          n/a")
         print(f"peak RSS        {peak / 1e9:8.2f} GB")
         return {"label": label, "wall": wall, "ttfp": ttfp, "frames": self.done,
-                "fps": self.done / wall if wall else 0, "peak_rss_gb": peak / 1e9}
+                "fps": self.done / wall if wall else 0, "steady_fps": steady, "peak_rss_gb": peak / 1e9}
 
 
 def run_legacy(a):
@@ -91,7 +96,7 @@ def run_legacy(a):
            "PYTORCH_ENABLE_MPS_FALLBACK": "1"}
     st = RunStats()
     proc = subprocess.Popen([PY, "-u", os.path.join(ROOT, "infer.py")], env=env,
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+                            stdout=subprocess.PIPE, stderr=open(LOG, "ab"), text=True, bufsize=1)
     peak = track(proc, lambda l: (st.feed(l), a.verbose and print(f"{time.time()-st.t0:6.2f} {l}")))
     proc.wait()
     r = st.report("legacy one-shot", peak)
@@ -102,7 +107,7 @@ def run_legacy(a):
 def run_worker(a):
     proc = subprocess.Popen([PY, "-u", os.path.join(ROOT, "worker.py")],
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, text=True, bufsize=1)
+                            stderr=open(LOG, "ab"), text=True, bufsize=1)
     results = []
     try:
         for i, label in enumerate(["worker cold (run 1)", "worker warm (run 2)"]):
