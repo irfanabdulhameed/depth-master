@@ -1,0 +1,66 @@
+diff --git a/video_depth_anything/dpt_temporal.py b/video_depth_anything/dpt_temporal.py
+index d629a11..65275a2 100644
+--- a/video_depth_anything/dpt_temporal.py
++++ b/video_depth_anything/dpt_temporal.py
+@@ -103,7 +103,7 @@ class DPTHeadTemporal(DPTHead):
+                 out, (int(patch_h * 14), int(patch_w * 14)), mode="bilinear", align_corners=True
+             )
+             ori_type = out.dtype
+-            with torch.autocast(device_type="cuda", enabled=False):
++            with torch.autocast(device_type=out.device.type, enabled=False):
+                 out = self.scratch.output_conv2(out.float())
+ 
+             output = out.to(ori_type) 
+@@ -117,7 +117,7 @@ class DPTHeadTemporal(DPTHead):
+                     out, (int(patch_h * 14), int(patch_w * 14)), mode="bilinear", align_corners=True
+                 )
+                 ori_type = out.dtype
+-                with torch.autocast(device_type="cuda", enabled=False):
++                with torch.autocast(device_type=out.device.type, enabled=False):
+                     out = self.scratch.output_conv2(out.float())
+                 ret.append(out.to(ori_type))
+             output = torch.cat(ret, dim=0)
+diff --git a/video_depth_anything/video_depth.py b/video_depth_anything/video_depth.py
+index 5598d30..27905a5 100644
+--- a/video_depth_anything/video_depth.py
++++ b/video_depth_anything/video_depth.py
+@@ -67,7 +67,7 @@ class VideoDepthAnything(nn.Module):
+         depth = F.relu(depth)
+         return depth.squeeze(1).unflatten(0, (B, T)) # return shape [B, T, H, W]
+ 
+-    def infer_video_depth(self, frames, target_fps, input_size=518, device='cuda', fp32=False):
++    def infer_video_depth(self, frames, target_fps, input_size=518, device='cuda', fp32=False, progress_callback=None):
+         frame_height, frame_width = frames[0].shape[:2]
+         ratio = max(frame_height, frame_width) / min(frame_height, frame_width)
+         if ratio > 1.78:  # we recommend to process video with ratio smaller than 16:9 due to memory limitation
+@@ -96,7 +96,9 @@ class VideoDepthAnything(nn.Module):
+ 
+         depth_list = []
+         pre_input = None
+-        for frame_id in tqdm(range(0, org_video_len, frame_step)):
++        _windows = list(range(0, org_video_len, frame_step))
++        _total_windows = len(_windows)
++        for _win_idx, frame_id in enumerate(tqdm(_windows)):
+             cur_list = []
+             for i in range(INFER_LEN):
+                 cur_list.append(torch.from_numpy(transform({'image': frame_list[frame_id+i].astype(np.float32) / 255.0})['image']).unsqueeze(0).unsqueeze(0))
+@@ -105,12 +107,17 @@ class VideoDepthAnything(nn.Module):
+                 cur_input[:, :OVERLAP, ...] = pre_input[:, KEYFRAMES, ...]
+ 
+             with torch.no_grad():
+-                with torch.autocast(device_type=device, enabled=(not fp32)):
+-                    depth = self.forward(cur_input) # depth shape: [1, T, H, W]
++                if fp32:
++                    depth = self.forward(cur_input)  # MPS: full fp32, skip autocast entirely
++                else:
++                    with torch.autocast(device_type=device, enabled=True):
++                        depth = self.forward(cur_input)
+ 
+             depth = depth.to(cur_input.dtype)
+             depth = F.interpolate(depth.flatten(0,1).unsqueeze(1), size=(frame_height, frame_width), mode='bilinear', align_corners=True)
+             depth_list += [depth[i][0].cpu().numpy() for i in range(depth.shape[0])]
++            if progress_callback is not None:
++                progress_callback(_win_idx + 1, _total_windows)
+ 
+             pre_input = cur_input
+ 

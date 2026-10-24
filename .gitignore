@@ -1,0 +1,22 @@
+# environment
+.venv/
+__pycache__/
+*.pyc
+
+# model weights — fetched by setup.sh (too large for git)
+*.pth
+*.part
+
+# generated / per-machine state
+outputs/
+/*.mp4
+*.log
+.settings.json
+
+# upstream image only used by its README
+vda/assets/teaser_video_v2.png
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
