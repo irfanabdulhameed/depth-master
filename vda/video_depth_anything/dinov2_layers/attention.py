@@ -7,6 +7,9 @@
 # References:
 #   https://github.com/facebookresearch/dino/blob/master/vision_transformer.py
 #   https://github.com/rwightman/pytorch-image-models/tree/master/timm/models/vision_transformer.py
+#
+# Modified for Depth Studio (2026): Attention.forward uses F.scaled_dot_product_attention
+# instead of an explicit q @ k.T (same result, far less memory on Apple GPUs).
 
 import logging
 

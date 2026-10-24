@@ -12,9 +12,11 @@ before switching encoders.
 
 ## Local patches
 
-Three files differ from upstream. The full diff is in
+Three files differ from upstream, and each says so in a "Modified for Depth
+Studio" line in its header (Apache-2.0 §4b). The full diff is in
 [`patches/apple-silicon.patch`](patches/apple-silicon.patch); it applies cleanly
-to the commit above.
+to the commit above. The rest of the project is MIT ([`../LICENSE`](../LICENSE)),
+but everything in `vda/` stays under its own Apache-2.0 license.
 
 - `video_depth_anything/dinov2_layers/attention.py`: the encoder's attention
   uses `F.scaled_dot_product_attention` instead of `q @ k.T`. It never builds the

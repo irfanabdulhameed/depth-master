@@ -1,8 +1,16 @@
 diff --git a/video_depth_anything/dinov2_layers/attention.py b/video_depth_anything/dinov2_layers/attention.py
-index 815a2bf..4716968 100644
+index 815a2bf..876179c 100644
 --- a/video_depth_anything/dinov2_layers/attention.py
 +++ b/video_depth_anything/dinov2_layers/attention.py
-@@ -12,6 +12,7 @@ import logging
+@@ -7,11 +7,15 @@
+ # References:
+ #   https://github.com/facebookresearch/dino/blob/master/vision_transformer.py
+ #   https://github.com/rwightman/pytorch-image-models/tree/master/timm/models/vision_transformer.py
++#
++# Modified for Depth Studio (2026): Attention.forward uses F.scaled_dot_product_attention
++# instead of an explicit q @ k.T (same result, far less memory on Apple GPUs).
+ 
+ import logging
  
  from torch import Tensor
  from torch import nn
@@ -10,7 +18,7 @@ index 815a2bf..4716968 100644
  
  
  logger = logging.getLogger("dinov2")
-@@ -50,13 +51,11 @@ class Attention(nn.Module):
+@@ -50,13 +54,11 @@ class Attention(nn.Module):
          B, N, C = x.shape
          qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
  
@@ -30,10 +38,19 @@ index 815a2bf..4716968 100644
          x = self.proj_drop(x)
          return x
 diff --git a/video_depth_anything/dpt_temporal.py b/video_depth_anything/dpt_temporal.py
-index d629a11..65275a2 100644
+index d629a11..71dfc05 100644
 --- a/video_depth_anything/dpt_temporal.py
 +++ b/video_depth_anything/dpt_temporal.py
-@@ -103,7 +103,7 @@ class DPTHeadTemporal(DPTHead):
+@@ -11,6 +11,8 @@
+ # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ # See the License for the specific language governing permissions and 
+ # limitations under the License. 
++#
++# Modified for Depth Studio (2026): autocast follows the tensor's device instead of "cuda".
+ import torch
+ import torch.nn.functional as F
+ import torch.nn as nn
+@@ -103,7 +105,7 @@ class DPTHeadTemporal(DPTHead):
                  out, (int(patch_h * 14), int(patch_w * 14)), mode="bilinear", align_corners=True
              )
              ori_type = out.dtype
@@ -42,7 +59,7 @@ index d629a11..65275a2 100644
                  out = self.scratch.output_conv2(out.float())
  
              output = out.to(ori_type) 
-@@ -117,7 +117,7 @@ class DPTHeadTemporal(DPTHead):
+@@ -117,7 +119,7 @@ class DPTHeadTemporal(DPTHead):
                      out, (int(patch_h * 14), int(patch_w * 14)), mode="bilinear", align_corners=True
                  )
                  ori_type = out.dtype
@@ -52,10 +69,20 @@ index d629a11..65275a2 100644
                  ret.append(out.to(ori_type))
              output = torch.cat(ret, dim=0)
 diff --git a/video_depth_anything/video_depth.py b/video_depth_anything/video_depth.py
-index 5598d30..27905a5 100644
+index 5598d30..6ae0f4b 100644
 --- a/video_depth_anything/video_depth.py
 +++ b/video_depth_anything/video_depth.py
-@@ -67,7 +67,7 @@ class VideoDepthAnything(nn.Module):
+@@ -11,6 +11,9 @@
+ # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
++#
++# Modified for Depth Studio (2026): the fp32 path skips autocast (needed on MPS), and
++# infer_video_depth() accepts a progress_callback.
+ import torch
+ import torch.nn.functional as F
+ import torch.nn as nn
+@@ -67,7 +70,7 @@ class VideoDepthAnything(nn.Module):
          depth = F.relu(depth)
          return depth.squeeze(1).unflatten(0, (B, T)) # return shape [B, T, H, W]
  
@@ -64,7 +91,7 @@ index 5598d30..27905a5 100644
          frame_height, frame_width = frames[0].shape[:2]
          ratio = max(frame_height, frame_width) / min(frame_height, frame_width)
          if ratio > 1.78:  # we recommend to process video with ratio smaller than 16:9 due to memory limitation
-@@ -96,7 +96,9 @@ class VideoDepthAnything(nn.Module):
+@@ -96,7 +99,9 @@ class VideoDepthAnything(nn.Module):
  
          depth_list = []
          pre_input = None
@@ -75,7 +102,7 @@ index 5598d30..27905a5 100644
              cur_list = []
              for i in range(INFER_LEN):
                  cur_list.append(torch.from_numpy(transform({'image': frame_list[frame_id+i].astype(np.float32) / 255.0})['image']).unsqueeze(0).unsqueeze(0))
-@@ -105,12 +107,17 @@ class VideoDepthAnything(nn.Module):
+@@ -105,12 +110,17 @@ class VideoDepthAnything(nn.Module):
                  cur_input[:, :OVERLAP, ...] = pre_input[:, KEYFRAMES, ...]
  
              with torch.no_grad():

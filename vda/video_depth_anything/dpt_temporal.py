@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
 # See the License for the specific language governing permissions and 
 # limitations under the License. 
+#
+# Modified for Depth Studio (2026): autocast follows the tensor's device instead of "cuda".
 import torch
 import torch.nn.functional as F
 import torch.nn as nn

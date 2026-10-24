@@ -161,10 +161,17 @@ vda/                  Video-Depth-Anything model code with local patches
 
 </details>
 
-## Credits
+## License
 
-Depth models: **Video-Depth-Anything-Small** and **Metric-Video-Depth-Anything-Small**
-by ByteDance, Apache-2.0 (code and weights). The Base and Large weights are
-non-commercial and are not used. The upstream version and local patches are in
-[vda/VENDORED.md](vda/VENDORED.md). The demo clips are the ones bundled with
-Video-Depth-Anything.
+Depth Studio's own code is released under the [MIT License](LICENSE).
+
+The model code in [`vda/`](vda/) is Video-Depth-Anything by ByteDance, under
+**Apache-2.0** ([vda/LICENSE](vda/LICENSE)). The three files changed for Apple
+Silicon say so in their headers, and [vda/VENDORED.md](vda/VENDORED.md) lists
+the upstream commit and the full diff. `setup.sh` downloads the
+**Video-Depth-Anything-Small** and **Metric-Video-Depth-Anything-Small**
+weights, both Apache-2.0. The Base and Large weights are non-commercial and are
+not used.
+
+The demo clips and the README images made from them come from the clips bundled
+with Video-Depth-Anything and remain their owners' work.

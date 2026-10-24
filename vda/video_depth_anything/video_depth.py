@@ -11,6 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# Modified for Depth Studio (2026): the fp32 path skips autocast (needed on MPS), and
+# infer_video_depth() accepts a progress_callback.
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
